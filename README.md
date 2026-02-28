@@ -39,7 +39,7 @@ $ brew install ngrok
 
 2. Bot → Privileged Gateway Intents より `Message Content Intent` を有効にします。
 
-3. [OpenRouter](https://openrouter.ai/) に登録し、API キーを取得します（`openrouter/free` モデルを利用）。
+3. [OpenRouter](https://openrouter.ai/) に登録し、API キーを取得します（`arcee-ai/trinity-large-preview:free` を優先し、失敗時は OpenRouter のモデルフォールバック機能で `openai/gpt-5-nano` を使用）。
 
 4. Cloudflare D1 に `kiroro-bot` という名称で DB を追加し、`Database ID` を取得します。
 
@@ -100,7 +100,7 @@ $ ts-node src/register.ts
 
 ### ユーザを BAN する
 
-心無い利用をするユーザから OpenRouter（`openrouter/free`）へのアクセスを禁止し、やさしいインターネットを目指しましょう。  
+心無い利用をするユーザから OpenRouter（`arcee-ai/trinity-large-preview:free` / `openai/gpt-5-nano`）へのアクセスを禁止し、やさしいインターネットを目指しましょう。  
 環境変数 `BANNED_USERS` に Discord のユーザネームをスペースなしのカンマ（`,`）区切りで追加します。環境変数が存在しない場合はどのユーザからの応答でも受け付けます。
 
 ```
