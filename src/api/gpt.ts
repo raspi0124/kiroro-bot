@@ -3,8 +3,8 @@ import fetch from 'node-fetch';
 const MAX_MESSAGE_LENGTH = 30;
 const MAX_TOKENS = 40;
 
-const endpoint = 'https://api.openai.com/v1/chat/completions';
-const model = 'gpt-3.5-turbo';
+const endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+const model = 'openrouter/free';
 
 const postToChatGpt = async (body: any, apiKey: string) => {
   try {
@@ -21,9 +21,9 @@ const postToChatGpt = async (body: any, apiKey: string) => {
       return json.choices[0].message.content as string;
     }
     const text = await response.text();
-    throw Error(`Failed to connect to GPT-3.5: ${text} (${response.status})`);
+    throw Error(`Failed to connect to OpenRouter: ${text} (${response.status})`);
   } catch (e) {
-    throw Error(`Failed to connect to GPT-3.5: ${e}`);
+    throw Error(`Failed to connect to OpenRouter: ${e}`);
   }
 };
 

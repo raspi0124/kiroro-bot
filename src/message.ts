@@ -82,7 +82,7 @@ export const createResponseMessage = async (interaction: any, env: Bindings) => 
         .slice(0, PAST_CONVERSATION_LENGTH)
         .reverse();
     }
-    response = await chatGpt([...latestContents, input], env.OPEN_API_KEY);
+    response = await chatGpt([...latestContents, input], env.OPENROUTER_API_KEY);
   }
   return `> ${input}\n${response}`;
 };

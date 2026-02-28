@@ -25,7 +25,11 @@ for (let chapter = startChapter; chapter <= endChapter; chapter++) {
     throw new Error(`Failed to load the spoiler of "one piece": ${e}`);
   }
 
-  const summary = await summarizeOnepiece(content, process.env.OPEN_API_KEY!);
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+  if (!openRouterApiKey) {
+    throw new Error('OPENROUTER_API_KEY is not set');
+  }
+  const summary = await summarizeOnepiece(content, openRouterApiKey);
   execSync(
     `wrangler d1 execute kiroro-bot --command=\"INSERT INTO onepiece VALUES (${chapter}, \'${summary}\')\";`,
   );
