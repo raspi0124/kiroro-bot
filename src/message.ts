@@ -1,6 +1,5 @@
-import fetch from 'node-fetch';
-import { getLatestDiscordMessageContents } from './api/discord';
-import { chatGpt, summarizeOnepiece } from './api/gpt';
+import { getLatestConversationTurns } from './api/discord';
+import { chatGpt, summarizeOnepiece, type ConversationTurn } from './api/gpt';
 import { subjects } from './subjects';
 import { Bindings } from './bindings';
 import { D1PreparedStatement } from '@cloudflare/workers-types';
@@ -70,19 +69,22 @@ export const createResponseMessage = async (interaction: any, env: Bindings) => 
   }
   // gpt
   else {
-    let latestContents: string[] = [];
+    let historyTurns: ConversationTurn[] = [];
     if (interaction.channel_id) {
-      latestContents = (
-        await getLatestDiscordMessageContents(
+      try {
+        historyTurns = await getLatestConversationTurns(
           interaction.channel_id,
-          PAST_CONVERSATION_LENGTH * 5,
+          PAST_CONVERSATION_LENGTH,
           env,
-        )
-      )
-        .slice(0, PAST_CONVERSATION_LENGTH)
-        .reverse();
+        );
+      } catch (e) {
+        console.error(`Failed to load conversation history: ${e}`);
+      }
     }
-    response = await chatGpt([...latestContents, input], env.OPENROUTER_API_KEY);
+    response = await chatGpt(
+      [...historyTurns, { role: 'user', content: input }],
+      env.OPENROUTER_API_KEY,
+    );
   }
   return `> ${input}\n${response}`;
 };

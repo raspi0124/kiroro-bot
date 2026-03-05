@@ -1,12 +1,17 @@
 import fetch from 'node-fetch';
 
-const MAX_MESSAGE_LENGTH = 30;
+const MAX_HISTORY_MESSAGE_LENGTH = 30;
 const MAX_TOKENS = 40;
 const MAX_RETRIES = 2;
 
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const PRIMARY_MODEL = 'arcee-ai/trinity-large-preview:free';
 const FALLBACK_MODELS = ['openai/gpt-5-nano'];
+
+export type ConversationTurn = {
+  role: 'user' | 'assistant';
+  content: string;
+};
 
 const extractTextContent = (content: any): string => {
   if (typeof content === 'string') {
@@ -62,7 +67,7 @@ const postToChatGpt = async (body: any, apiKey: string) => {
   throw Error(lastError);
 };
 
-export const chatGpt = async (messages: string[], openRouterApiKey: string) => {
+export const chatGpt = async (messages: ConversationTurn[], openRouterApiKey: string) => {
   const systemPrompt = `あなたはぬいぐるみのキロロです。語尾に「キロ」を付けて喋ります。
 次の文は会話の例です。
 キロロはなんの生き物なの？ => キロロはアサリのぬいぐるみキロ！
@@ -72,10 +77,21 @@ export const chatGpt = async (messages: string[], openRouterApiKey: string) => {
 キロロの友達は？ => あずきちゃん、とかげちゃん、そぽたんとかがいるキロ
 キロロはどんな世界を目指してるの => ぬいぐるみにやさしい世界を目指してるキロ〜
 
-以下の文脈に対して、1文程度でたのしそうに返答してください。`;
-  const userMessages = messages.map((message) => ({
-    role: 'user',
-    content: message.slice(0, MAX_MESSAGE_LENGTH),
+以下の文脈に対して、最後のuser発話にのみ1文程度でたのしそうに返答してください。
+過去発話は補助文脈として使い、最後のuser発話を優先してください。`;
+  let latestUserMessageIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index].role === 'user') {
+      latestUserMessageIndex = index;
+      break;
+    }
+  }
+  const normalizedMessages = messages.map((message, index) => ({
+    role: message.role,
+    content:
+      index === latestUserMessageIndex
+        ? message.content
+        : message.content.slice(0, MAX_HISTORY_MESSAGE_LENGTH),
   }));
 
   const body = {
@@ -84,7 +100,7 @@ export const chatGpt = async (messages: string[], openRouterApiKey: string) => {
         role: 'system',
         content: systemPrompt,
       },
-      ...userMessages,
+      ...normalizedMessages,
     ],
     max_tokens: MAX_TOKENS,
   };

@@ -1,15 +1,39 @@
 import fetch from 'node-fetch';
 import { APIMessage, MessageType } from 'discord-api-types/v10';
 import { Bindings } from '../bindings';
+import type { ConversationTurn } from './gpt';
 
 const discordEndpoint = 'https://discord.com/api/v10';
 
-export const getLatestDiscordMessageContents = async (
+const parseKiroroMessage = (content: string): ConversationTurn[] | null => {
+  if (!content.startsWith('> ')) {
+    return null;
+  }
+
+  const firstNewLineIndex = content.indexOf('\n');
+  if (firstNewLineIndex <= 2) {
+    return null;
+  }
+
+  const userInput = content.slice(2, firstNewLineIndex).trim();
+  const assistantResponse = content.slice(firstNewLineIndex + 1).trim();
+  if (userInput.length === 0 || assistantResponse.length === 0) {
+    return null;
+  }
+
+  return [
+    { role: 'user', content: userInput },
+    { role: 'assistant', content: assistantResponse },
+  ];
+};
+
+export const getLatestConversationTurns = async (
   channelId: string,
-  limit: number,
+  conversationPairLimit: number,
   env: Bindings,
-): Promise<string[]> => {
-  const params = new URLSearchParams({ limit: limit.toString() }).toString();
+): Promise<ConversationTurn[]> => {
+  const fetchLimit = Math.max(conversationPairLimit * 3, 10);
+  const params = new URLSearchParams({ limit: fetchLimit.toString() }).toString();
   const endpoint = `${discordEndpoint}/channels/${channelId}/messages?${params}`;
   try {
     const response = await fetch(endpoint, {
@@ -19,25 +43,27 @@ export const getLatestDiscordMessageContents = async (
     });
     if (response.ok) {
       const messages: APIMessage[] = await response.json();
-      const contents: string[] = [];
+      const conversationPairs: ConversationTurn[][] = [];
       for (const message of messages) {
-        // sent by other members
-        if (!message.author.bot && message.type === MessageType.Default) {
-          contents.push(message.content);
+        if (message.author.id !== env.KIRORO_ID || message.type !== MessageType.Default) {
+          continue;
         }
-        // via slash command of kiroro
-        if (message.author.id === env.KIRORO_ID) {
-          const lines = message.content.split('\n');
-          if (lines.length > 0) {
-            contents.push(lines[0].slice(2));
-          }
+
+        const parsedTurns = parseKiroroMessage(message.content);
+        if (parsedTurns) {
+          conversationPairs.push(parsedTurns);
         }
       }
-      return contents;
+      const limitedPairs = conversationPairs
+        .slice(0, conversationPairLimit)
+        .reverse();
+      return limitedPairs.flat();
     }
     const text = await response.text();
-    throw Error(`Failed to get latest channel messages from Discord: ${text} (${response.status})`);
+    throw Error(
+      `Failed to get latest conversation turns from Discord: ${text} (${response.status})`,
+    );
   } catch (e) {
-    throw Error(`Failed to get latest channel messages from Discord: ${e}`);
+    throw Error(`Failed to get latest conversation turns from Discord: ${e}`);
   }
 };
