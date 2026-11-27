@@ -1,12 +1,17 @@
 import fetch from 'node-fetch';
 
 const MAX_HISTORY_MESSAGE_LENGTH = 30;
-const MAX_TOKENS = 40;
-const MAX_RETRIES = 2;
-
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-const PRIMARY_MODEL = 'arcee-ai/trinity-large-preview:free';
-const FALLBACK_MODELS = ['openai/gpt-5-nano'];
+
+// 上から順に試す。waitUntil の上限（30 秒）に収まるように timeoutMs の合計を抑える。
+const ATTEMPTS = [
+  // 無料モデルは推論を無効化できないものがあるため、推論分も含めて max_tokens を大きめに取る
+  { params: { model: 'openrouter/free', max_tokens: 1500 }, timeoutMs: 15000 },
+  {
+    params: { model: 'openai/gpt-6-luna', max_tokens: 500, reasoning: { effort: 'none' } },
+    timeoutMs: 8000,
+  },
+];
 
 export type ConversationTurn = {
   role: 'user' | 'assistant';
@@ -35,7 +40,9 @@ const extractTextContent = (content: any): string => {
 
 const postToChatGpt = async (body: any, apiKey: string) => {
   let lastError = 'unknown error';
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (const { params, timeoutMs } of ATTEMPTS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(OPENROUTER_ENDPOINT, {
         method: 'POST',
@@ -43,26 +50,27 @@ const postToChatGpt = async (body: any, apiKey: string) => {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...body,
-          model: PRIMARY_MODEL,
-          models: FALLBACK_MODELS,
-        }),
+        body: JSON.stringify({ ...body, ...params }),
+        signal: controller.signal,
       });
       if (response.ok) {
-        const json = await response.json();
-        const content = extractTextContent(json?.choices?.[0]?.message?.content).trim();
+        const json: any = await response.json();
+        const choice = json?.choices?.[0];
+        const content = extractTextContent(choice?.message?.content).trim();
         if (content.length > 0) {
           return content;
         }
-        lastError = `OpenRouter returned empty content (provider=${json?.provider}, model=${json?.model})`;
+        lastError = `OpenRouter returned empty content (provider=${json?.provider}, model=${json?.model}, finish_reason=${choice?.finish_reason})`;
       } else {
         const text = await response.text();
-        lastError = `OpenRouter status=${response.status} body=${text}`;
+        lastError = `OpenRouter status=${response.status} body=${text.slice(0, 500)}`;
       }
     } catch (e) {
       lastError = `OpenRouter error=${e}`;
+    } finally {
+      clearTimeout(timer);
     }
+    console.error(`${params.model}: ${lastError}`);
   }
   throw Error(lastError);
 };
@@ -102,7 +110,6 @@ export const chatGpt = async (messages: ConversationTurn[], openRouterApiKey: st
       },
       ...normalizedMessages,
     ],
-    max_tokens: MAX_TOKENS,
   };
   return await postToChatGpt(body, openRouterApiKey);
 };

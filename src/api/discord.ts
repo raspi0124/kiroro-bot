@@ -4,6 +4,24 @@ import { Bindings } from '../bindings';
 import type { ConversationTurn } from './gpt';
 
 const discordEndpoint = 'https://discord.com/api/v10';
+const MAX_CONTENT_LENGTH = 2000;
+
+export const editOriginalResponse = async (
+  applicationId: string,
+  interactionToken: string,
+  content: string,
+) => {
+  const endpoint = `${discordEndpoint}/webhooks/${applicationId}/${interactionToken}/messages/@original`;
+  const response = await fetch(endpoint, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: content.slice(0, MAX_CONTENT_LENGTH) }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw Error(`Failed to edit the interaction response: ${text} (${response.status})`);
+  }
+};
 
 const parseKiroroMessage = (content: string): ConversationTurn[] | null => {
   if (!content.startsWith('> ')) {

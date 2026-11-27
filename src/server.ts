@@ -10,9 +10,25 @@ import { Hono } from 'hono';
 import { Bindings } from './bindings';
 import { KIRO_COMMAND } from './commands';
 import { createResponseMessage } from './message';
+import { editOriginalResponse } from './api/discord';
 import { getApplicationId } from './util';
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+const respondLater = async (interaction: APIInteraction, env: Bindings) => {
+  let content: string;
+  try {
+    content = String(await createResponseMessage(interaction, env));
+  } catch (e) {
+    console.error(`Failed to create a response: ${e}`);
+    content = `キロロはお休み中キロＺｚｚ...\n${e}`;
+  }
+  try {
+    await editOriginalResponse(interaction.application_id, interaction.token, content);
+  } catch (e) {
+    console.error(`${e}`);
+  }
+};
 
 app.get('/', async (c) => {
   console.log(c);
@@ -48,23 +64,11 @@ app.post('/', async (c) => {
   ) {
     switch (interaction.data.name.toLowerCase()) {
       case KIRO_COMMAND.name.toLowerCase(): {
-        try {
-          const response = await createResponseMessage(interaction, c.env);
-          return c.json<APIInteractionResponse>({
-            type: InteractionResponseType.ChannelMessageWithSource,
-            data: {
-              content: response,
-            },
-          });
-        } catch (e) {
-          console.error(e);
-          return c.json<APIInteractionResponse>({
-            type: InteractionResponseType.ChannelMessageWithSource,
-            data: {
-              content: `キロロはお休み中キロＺｚｚ...\n${e}`,
-            },
-          });
-        }
+        // Discord は 3 秒以内の応答を要求するため、先に「考え中」を返して後から本文を書き込む
+        c.executionCtx.waitUntil(respondLater(interaction, c.env));
+        return c.json<APIInteractionResponse>({
+          type: InteractionResponseType.DeferredChannelMessageWithSource,
+        });
       }
       default:
         return c.json({ error: 'Unknown Type' }, 400);
